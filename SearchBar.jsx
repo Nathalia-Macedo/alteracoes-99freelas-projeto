@@ -1,211 +1,129 @@
-// import React, { useState, useEffect, useRef } from 'react';
-// import axios from 'axios';
-
-// const MIN_CHARS = 3;
-
-// export default function SearchBar({ onSelect, onSeeAll }) {
-//   const [query, setQuery] = useState('');
-//   const [suggestions, setSuggestions] = useState([]);
-//   const [loading, setLoading] = useState(false);
-//   const containerRef = useRef();
-
-//   useEffect(() => {
-//     const handleClickOutside = (event) => {
-//       if (containerRef.current && !containerRef.current.contains(event.target)) {
-//         setSuggestions([]);
-//       }
-//     };
-//     document.addEventListener('mousedown', handleClickOutside);
-//     return () => {
-//       document.removeEventListener('mousedown', handleClickOutside);
-//     };
-//   }, []);
-
-//   useEffect(() => {
-//     if (query.length < MIN_CHARS) {
-//       setSuggestions([]);
-//       return;
-//     }
-//     const controller = new AbortController();
-//     (async () => {
-//       try {
-//         setLoading(true);
-//         const [a, b] = await Promise.all([
-//           axios.get(
-//             `https://conecta-transparencia.agencianew.com.br/publications`,
-//             { params: { searchText: query }, signal: controller.signal }
-//           ),
-//           axios.get(
-//             `https://conecta.agencianew.com.br/publications`,
-//             { params: { searchText: query }, signal: controller.signal }
-//           ),
-//         ]);
-//         const merged = [...a.data, ...b.data]
-//           .filter(i => i && i.number && i.description_title);
-//         setSuggestions(merged.slice(0, 5));
-//       } catch (err) {
-//         if (err.name !== 'CanceledError') console.error(err);
-//       } finally {
-//         setLoading(false);
-//       }
-//     })();
-//     return () => controller.abort();
-//   }, [query]);
-
-//   return (
-//     <div ref={containerRef} className="relative w-full max-w-xl mx-auto mt-10 px-4">
-//       <div className="flex items-center gap-3 bg-white border border-gray-300 rounded-lg shadow-sm px-4 py-3">
-//         <input
-//           type="text"
-//           value={query}
-//           onChange={(e) => setQuery(e.target.value)}
-//           placeholder="Busque por uma publicação..."
-//           className="w-full text-sm text-gray-800 placeholder-gray-500 bg-white focus:outline-none"
-//         />
-//         <span className="text-xl text-indigo-500">🔍</span>
-//       </div>
-
-//       {query.length >= MIN_CHARS && (
-//         <div className="absolute z-50 w-full bg-white border border-gray-200 mt-2 rounded-lg shadow-md max-h-96 overflow-y-auto">
-//           {loading && (
-//             <p className="p-4 text-sm text-gray-600">Carregando resultados...</p>
-//           )}
-
-//           {!loading && suggestions.length === 0 && (
-//             <p className="p-4 text-sm text-gray-600">Nenhum resultado encontrado.</p>
-//           )}
-
-//           {!loading && suggestions.map((item, idx) => (
-//             <button
-//               key={idx}
-//               onClick={() => onSelect(item)}
-//               className="w-full text-left px-4 py-3 hover:bg-indigo-50 border-b border-gray-100 bg-white"
-//             >
-//               <p className="text-sm font-medium text-gray-800">
-//                 {(item.type?.name || item.name || 'Sem Tipo')} – Nº {item.number}
-//               </p>
-//               <p className="text-xs text-gray-600 truncate">
-//                 {item.description_title || 'Sem descrição'}
-//               </p>
-//             </button>
-//           ))}
-
-//           {!loading && suggestions.length === 5 && (
-//             <button
-//               onClick={() => onSeeAll(query)}
-//               className="block w-full text-center bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-semibold py-3 text-sm border-t border-gray-200"
-//             >
-//               Ver todos os resultados
-//             </button>
-//           )}
-//         </div>
-//       )}
-//     </div>
-//   );
-// }
-// src/SearchBar.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 
 const MIN_CHARS = 3;
+const ENDPOINTS = [
+  'https://conecta-transparencia.agencianew.com.br/publications',
+  'https://conecta.agencianew.com.br/publications',
+];
 
-export default function SearchBar({ onSelect, onSeeAll }) {
-  const [query, setQuery] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
+/* devolve um trecho da descrição com o termo em destaque ----------------- */
+function snippet(text = '', query, radius = 40) {
+  const i = text.toLowerCase().indexOf(query.toLowerCase());
+  if (i === -1) return text.slice(0, radius * 2) + (text.length > radius * 2 ? '…' : '');
+  const s = Math.max(0, i - radius);
+  const e = Math.min(text.length, i + query.length + radius);
+  return (s ? '…' : '') + text.slice(s, e) + (e < text.length ? '…' : '');
+}
+
+export default function SearchBar() {
+  const [q, setQ] = useState('');
+  const [sug, setSug] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [active, setActive] = useState(true);
-  const containerRef = useRef();
+  const nav = useNavigate();
+  const ref = useRef();
 
+  /* fecha dropdown ao clicar fora --------------------------------------- */
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
-        setSuggestions([]);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    const h = (e) => !ref.current?.contains(e.target) && setSug([]);
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
 
+  /* busca nas duas APIs sempre que q muda -------------------------------- */
   useEffect(() => {
-    if (query.length < MIN_CHARS) {
-      setSuggestions([]);
-      return;
-    }
-    const controller = new AbortController();
+    if (q.length < MIN_CHARS) { setSug([]); return; }
+
+    const ctrl = new AbortController();
     (async () => {
       try {
         setLoading(true);
-        const [a, b] = await Promise.all([
-          axios.get(
-            `https://conecta-transparencia.agencianew.com.br/publications`,
-            { params: { searchText: query }, signal: controller.signal }
-          ),
-          axios.get(
-            `https://conecta.agencianew.com.br/publications`,
-            { params: { searchText: query }, signal: controller.signal }
-          ),
-        ]);
-        const merged = [...a.data, ...b.data].filter(i => i && i.number && i.description_title);
-        setSuggestions(merged.slice(0, 5));
+
+        const responses = await Promise.all(
+          ENDPOINTS.map((url) =>
+            axios.get(url, { params: { searchText: q }, signal: ctrl.signal })
+          )
+        );
+        const merged = responses.flatMap((r) => r.data);
+
+        /* normaliza => { id, number, description, typeName, attachments } */
+        const norm = merged.map((pub) => ({
+          id:          pub.publication_id,
+          number:      pub.number,
+          description: pub.description || pub.description_title,
+          typeName:    pub.name,                // o campo “name” veio cheio
+          attachments: pub.attachments ?? [],
+        }));
+
+        /* mantém só quem tem id + descrição ----------------------------- */
+        const filtrados = norm.filter((p) => p.id && p.description);
+
+        setSug(filtrados.slice(0, 5));
       } catch (err) {
         if (err.name !== 'CanceledError') console.error(err);
       } finally {
         setLoading(false);
       }
     })();
-    return () => controller.abort();
-  }, [query]);
 
-  const handleSeeAll = (value) => {
-    onSeeAll(value);
-    setSuggestions([]);
-    setQuery('');
-    setActive(false);
+    return () => ctrl.abort();
+  }, [q]);
+
+  /* navegação ----------------------------------------------------------- */
+  const openItem = (it) => {
+    nav(`/publicacao/${it.id}`);
+    setSug([]);
   };
 
+  const openAll = () => {
+    nav(`/search?searchText=${encodeURIComponent(q)}`);
+    setSug([]);
+  };
+
+  /* render -------------------------------------------------------------- */
   return (
-    <div ref={containerRef} className={`relative w-full max-w-xl mx-auto mt-10 px-4 ${!active ? 'opacity-50 pointer-events-none' : ''}`}>
-      <div className="flex items-center gap-3 bg-white border border-gray-300 rounded-lg shadow-sm px-4 py-3">
+    <div ref={ref} className="relative max-w-xl mx-auto">
+      {/* input */}
+      <div className="flex items-center gap-2 border rounded px-3 py-2 bg-white">
         <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Busque por uma publicação..."
-          className="w-full text-sm text-gray-800 placeholder-gray-500 bg-white focus:outline-none"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Busque por uma publicação…"
+          className="flex-1 outline-none text-sm bg-white"
         />
-        <Search className="w-5 h-5 text-indigo-500" />
+        <Search size={18} className="text-gray-600" />
       </div>
 
-      {query.length >= MIN_CHARS && suggestions.length > 0 && (
-        <div className="absolute z-50 left-4 right-4 bg-white border border-gray-200 mt-2 rounded-lg shadow-md max-h-96 overflow-y-auto">
-          {loading && (
-            <p className="p-4 text-sm text-gray-600">Carregando resultados...</p>
-          )}
+      {/* dropdown */}
+      {q.length >= MIN_CHARS && (
+        <div className="absolute left-0 right-0 bg-white border mt-1 rounded shadow max-h-80 overflow-y-auto z-50">
+          {loading && <p className="p-3 text-sm">Carregando…</p>}
 
-          {!loading && suggestions.map((item, idx) => (
+          {!loading && sug.map((it) => (
             <button
-              key={idx}
-              onClick={() => onSelect(item)}
-              className="w-full text-left px-4 py-3 hover:bg-indigo-50 border-b border-gray-100 bg-white"
+              key={it.id}
+              onClick={() => openItem(it)}
+              className="block w-full text-left px-4 py-2 hover:bg-indigo-50 border-b last:border-0"
             >
-              <p className="text-sm font-medium text-gray-800">
-                {(item.type?.name || item.name || 'Sem Tipo')} – Nº {item.number}
+              <p className="text-sm font-medium">
+                {(it.typeName || 'Sem Tipo')} – Nº {it.number || '–'}
               </p>
-              <p className="text-xs text-gray-600 truncate">
-                {item.description_title || 'Sem descrição'}
+              <p className="text-xs text-gray-600">
+                {snippet(it.description, q)}
               </p>
             </button>
           ))}
 
-          <button
-            onClick={() => handleSeeAll(query)}
-            className="block w-full text-center bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-semibold py-3 text-sm border-t border-gray-200"
-          >
-            Ver todos os resultados
-          </button>
+          {!loading && (
+            <button
+              onClick={openAll}
+              className="block w-full text-center bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-semibold py-2 text-sm"
+            >
+              Ver todos os resultados
+            </button>
+          )}
         </div>
       )}
     </div>
