@@ -312,6 +312,7 @@ export default function SearchResults() {
           fetch(`${BASE_C}/publications?searchText=${encodeURIComponent(searchText)}`).then(
             (r) => r.json()
           ),
+          
         ]);
 
         const all = [
@@ -320,6 +321,7 @@ export default function SearchResults() {
         ].filter((p) => p.id);
 
         setResults(all);
+        
       } finally {
         setLoading(false);
       }
@@ -432,7 +434,7 @@ export default function SearchResults() {
                     <tr
                       key={it.id}
                       className="border-t border-gray-200 hover:bg-indigo-50 cursor-pointer"
-                      onClick={() => navigate(`/publicacao/${it.id}`)}
+                      onClick={() => navigate(`/publicacao/${it.id}`, { state: it })}
                     >
                       <td className="p-4">
                         {it.fileUrl ? (
